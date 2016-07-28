@@ -1,0 +1,176 @@
+<html ng-app="siqApp">
+	<head>
+		<meta charset="utf-8">
+		<title></title>
+
+		
+		<!-- Latest compiled and minified CSS -->
+		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" integrity="sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7" crossorigin="anonymous">
+
+		<!-- Optional theme -->
+		<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap-theme.min.css" integrity="sha384-fLW2N01lMqjakBkx3l/M9EahuwpSfeNvV63J5ezn3uZzapT0u7EYsXMjQV+0En5r" crossorigin="anonymous">
+
+		<script src="https://code.jquery.com/jquery-2.2.1.min.js"></script>
+		<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.4.5/angular.min.js"></script>
+		<script src="https://cdn.socket.io/socket.io-1.4.5.js"></script>
+
+		<style>
+			.clickable{
+				cursor: pointer
+			}
+		</style>
+		
+	</head>
+	<body ng-controller="siqController as siq">
+	<div class="container">
+		<div class="col-lg-8">
+		<div class="row"><label>Search<input ng-model="search.subject"></label></div>
+	<div ng-repeat="entry in siq.data | filter:search:strict">
+		<div class="panel panel-default" ng-show="siq.editNum != $index">
+			<div class="panel-heading">
+				<span ng-click="siq.getEntry($index)" class ="clickable">{{entry.subject}}</span>
+				<span class="pull-right">
+					<span class="clickable glyphicon glyphicon-trash text-danger" ng-click="siq.deleteEntry($index)"></span>
+				</span>
+			</div>
+			<div class="panel-body" ng-show="siq.panelNum == $index">{{entry.content}}
+				<br>
+				<button class="btn btn-warning" ng-click="siq.editNum = $index">Edit&nbsp;<span class="clickable glyphicon glyphicon-pencil"></span></button>
+			</div>
+		</div>
+		<div ng-if="siq.editNum == $index && siq.panelNum == $index">
+			<form>
+				<div class="form-group">
+					<label for="editSubject">Subject</label>
+					<input type="text" class="form-control" id="editSubject" placeholder="Subject" ng-model="entry.subject">
+				</div>
+				<div class="form-group">
+					<label for="editContent">Content</label>
+					<textarea id="editContent" class="form-control" rows="3" ng-model="entry.content"></textarea>
+				</div>
+				<button type="submit" class="btn btn-success" ng-click="siq.updateEntry(entry)">Submit</button>
+				<button class="btn btn-danger" ng-click="siq.cancelEdit(entry)">Cancel</button>
+			</form>
+		</div>
+	</div>
+
+	<form>
+		<div class="form-group">
+			<label for="subject">Subject</label>
+			<input type="text" class="form-control" id="subject" placeholder="Subject" ng-model="siqSubject">
+		</div>
+		<div class="form-group">
+			<label for="content">Content</label>
+			<textarea id="content" class="form-control" rows="3" ng-model="siqContent"></textarea>
+		</div>
+		<button type="submit" class="btn btn-default" ng-click="siq.postEntry( siqSubject, siqContent )">Submit</button>
+	</form>
+	</div>
+		<!-- Sidebar --> 
+		<div id="sidebar-wrapper" class="col-lg-4"> 
+			<div> 
+				<form id="username">
+					<label for="name">Username:</label>
+					<input type="text" id="name">
+					<button type="submit" class="btn btn-success">Save Username</button>
+				</form>
+				<textarea id="output" cols="50" rows="20" readonly="yes"> </textarea>
+				<form id="chat"> 
+					<div><input id="textMessage" type="text" size="50" name="message" placeholder="Enter message to send here..."> </div>
+					<div><button type="submit" class="btn btn-success">Send</button> </div>
+				</form> 
+			</div>
+		 </div>
+		</div>
+	<pre>{{ siq.data | json }}</pre>
+	<script>
+		var app = angular.module('siqApp', []);
+		app.controller('siqController', function($scope, $http){
+
+			var siq = this;
+
+			$http.get('http://localhost:8080/api/v2/entries.json')
+					.then(function(response){
+						siq.data = response.data;
+					});
+
+			siq.panelNum = -1;
+
+			siq.undo = [];
+
+
+			siq.cancelEdit = function(entry) {
+				siq.editNum = -1;
+				entry = siq.undo.pop();
+			}
+
+			siq.getEntry = function(index) {
+				siq.panelNum = (siq.panelNum == index) ? -1 : index;
+				var id = siq.data[index]._id;
+				$http.get('http://localhost:8080/api/v2/entries/' + id + '.json')
+						.then(function(response){
+							siq.data[index] = response.data;
+						});
+			};
+
+			siq.deleteEntry = function(index){
+				var id = siq.data[index]._id;
+				siq.data.splice(index, 1);
+				$http.delete('http://localhost:8080/api/v2/entries/' + id);
+			};
+
+			siq.postEntry = function(subject, content){
+				//{"subject":"Two","content":"content2"}
+				var entry = {};
+				entry.subject = subject;
+				entry.content = content;
+				$http.post('http://localhost:8080/api/v2/entries.json', entry)
+						.then(function(res) {
+						// this callback will be called asynchronously
+						// when the response is available
+							console.log("Success: " + res.data);
+							entry._id = res.data;
+							siq.data.push(entry);
+						}, function(res) {
+							// called asynchronously if an error occurs
+							// or server returns response with an error status.
+							console.log("Error: " + res.data);
+						});
+			};
+
+			siq.updateEntry = function(entry){
+				var id = entry._id;
+				//var entry = {};
+				//entry.subject = 'a' + siq.data[index].subject;
+				//entry.content = siq.data[index].content + 'z';
+				$http.put('http://localhost:8080/api/v2/entries/' + id + '.json', entry);
+
+			};
+		});
+		var user = "anonymous";
+		//Connect to our node server and socket io
+		var socket = io.connect("http://localhost:8080");
+		//If socket connected, display message
+		if (socket != null)
+		{
+			$('#output').append("Welcome to the Chat!\n");
+		}
+		//On submit in the form
+		$('#chat').submit(function(){
+			//create an emit "chat message" event
+			socket.emit('chat message', `${user}: ` +  $('#textMessage').val());
+			$('#textMessage').val('');
+			return false;
+		});
+		//When we receive a new message, display it
+		socket.on('chat message', function(msg){
+			$('#output').append(msg + "\n");
+		});
+
+		$('#username').submit(function(){
+			user = $('#name').val();
+			$('#output').append(`Username ${user} selected\n`);
+		});
+	</script>
+	</body>
+</html>
